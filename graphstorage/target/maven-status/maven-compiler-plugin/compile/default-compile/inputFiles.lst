@@ -1,0 +1,11 @@
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/EdgeBlob.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/EdgeStore.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/ExampleUsage.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/GraphIngestor.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/GraphQueries.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/GraphStore.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/IndexStore.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/KeySchema.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/MetaStore.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/NodeBlob.java
+/home/furzua/Utal-2025/Memoria/graph-storage/graphstorage/src/main/java/com/gdblab/graphstorage/NodeStore.java

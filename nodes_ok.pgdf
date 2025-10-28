@@ -1,0 +1,10 @@
+@id|@label|name|age|city|url
+P1|Person|Lisa Silva|70|Lima|https://example.org/node/P1
+P2|Person|Barney Lopez|43|Omaha|https://example.org/node/P2
+P3|Person|Lucía Rodríguez|70|Santiago|https://example.org/node/P3
+P4|Person|Alexis Vega|19|Omaha|https://example.org/node/P4
+P5|Person|Maggie Santos|22|Springfield|https://example.org/node/P5
+
+@id|@label|name|industry|hq_city|website
+O1|Organization|Andes Academy 1|Transportation|Lima|https://andesacademy1.com
+O2|Organization|Vertex Health 2|Healthcare|Omaha|https://vertexhealth2.net
