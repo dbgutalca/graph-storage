@@ -1,0 +1,14 @@
+@id|@label|@dir|@out|@in
+E4|Knows|T|P2|P4
+E1|Knows|T|P1|P2
+E2|Knows|T|P2|P3
+E3|Knows|T|P3|P2
+@id|@label|@dir|@out|@in
+E5|Likes|T|P2|M3
+E6|Likes|T|P4|M3
+E7|Likes|T|P3|M2
+E8|Likes|T|P1|M1
+@id|@label|@dir|@out|@in
+E9|HasCreator|T|M3|P1
+E10|HasCreator|T|M2|P4
+E11|HasCreator|T|M1|P3

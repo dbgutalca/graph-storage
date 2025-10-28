@@ -1,0 +1,9 @@
+@id|@label|creationDate
+M1|Message|2025-04-01
+M2|Message|2025-06-02
+M3|Message|2025-07-21
+@id|@label|name
+P1|Person|Homer
+P2|Person|Bart
+P3|Person|Lisa
+P4|Person|Marge
