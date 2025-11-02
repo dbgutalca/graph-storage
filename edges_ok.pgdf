@@ -1,7 +1,0 @@
-@id|@label|@dir|@out|@in
-E1|Knows|T|P1|P5
-E2|Knows|T|P4|P3
-E3|Knows|T|P3|P1
-E4|Knows|T|P5|P2
-E5|Works_for|T|P4|O1
-E6|Works_for|T|P3|O2
