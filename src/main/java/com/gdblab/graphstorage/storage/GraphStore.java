@@ -50,7 +50,7 @@ public class GraphStore implements AutoCloseable {
         this.edgeStore = new EdgeStore(db, cfEdges);
         this.indexStore = new IndexStore(db, cfIndex);
         this.queries = new GraphQueries(nodeStore, edgeStore, indexStore, this.metaStore);
-        this.ingestor = new GraphIngestor(nodeStore, edgeStore, indexStore, this.metaStore);
+        this.ingestor = new GraphIngestor(db, cfNodes, cfEdges, cfIndex, this.metaStore);
     }
 
     public static GraphStore open(Path dbPath) throws RocksDBException, IOException {
