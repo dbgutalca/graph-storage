@@ -4,9 +4,6 @@ GraphStorage is a Java library for storing large-scale property graphs in second
 
 While this library was developed as a core component for the PathDB graph database engine, it is designed as a standalone module that can be integrated into any Java project requiring persistent graph data structures.
 
-## Academic Context
-
-This project is developed as part of a final-year Computer Engineering thesis at [REPLACE: Your University Name]. The primary goal is to provide a robust, high-performance on-disk storage implementation for comparative analysis within the PathDB research project.
 
 ## Features
 
