@@ -3,7 +3,7 @@ package com.gdblab.graphstorage.storage;
 import org.rocksdb.*;
 
 import java.io.Closeable;
-import java.io.IOException; // Asegúrate de que este import esté
+import java.io.IOException; 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
