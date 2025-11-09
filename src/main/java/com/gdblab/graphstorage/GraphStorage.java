@@ -163,42 +163,22 @@ public class GraphStorage implements AutoCloseable {
     //  Metadata Queries 
 
     public long getNodesQuantity() throws GraphStorageException {
-        try {
-            return store.queries().getNodesQuantity();
-        } catch (RocksDBException e) {
-            throw new GraphStorageException("Failed to get node count", e);
-        }
+        return store.queries().getNodesQuantity();
     }
 
     public long getEdgesQuantity() throws GraphStorageException {
-        try {
-            return store.queries().getEdgesQuantity();
-        } catch (RocksDBException e) {
-            throw new GraphStorageException("Failed to get edge count", e);
-        }
+        return store.queries().getEdgesQuantity();
     }
 
     public Map<String, Long> getEdgesQuantityByLabel() throws GraphStorageException {
-        try {
-            return store.queries().getEdgesQuantityByLabel();
-        } catch (RocksDBException e) {
-            throw new GraphStorageException("Failed to get edge counts by label", e);
-        }
+        return store.queries().getEdgesQuantityByLabel();
     }
 
     public Map<String, Set<String>> getNodesStructure () throws GraphStorageException {
-        try {
-            return store.queries().getNodesStructure();
-        } catch (RocksDBException e) {
-            throw new GraphStorageException("Failed to get nodes structure", e);
-        }
+         return store.queries().getNodesStructure();
     }
 
     public Map<String, Set<String>> getEdgesStructure () throws GraphStorageException {
-        try {
-            return store.queries().getEdgesStructure();
-        } catch (RocksDBException e) {
-            throw new GraphStorageException("Failed to get edges structure", e);
-        }
+        return store.queries().getEdgesStructure();
     }
 }

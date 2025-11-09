@@ -59,23 +59,23 @@ public class GraphQueries implements Closeable {
      */
 
     // Structure
-    public long getNodesQuantity() throws RocksDBException {
+    public long getNodesQuantity() {
         return meta.getNodeCount();
     }
 
-    public long getEdgesQuantity() throws RocksDBException {
+    public long getEdgesQuantity() {
         return meta.getEdgeCount();
     }
 
-    public Map<String, Long> getEdgesQuantityByLabel() throws RocksDBException {
+    public Map<String, Long> getEdgesQuantityByLabel() {
         return meta.getEdgeCountsByLabel();
     }
 
-    public Map<String, Set<String>> getNodesStructure() throws RocksDBException {
+    public Map<String, Set<String>> getNodesStructure() {
         return meta.getNodeSchema();
     }
 
-    public Map<String, Set<String>> getEdgesStructure() throws RocksDBException {
+    public Map<String, Set<String>> getEdgesStructure() {
         return meta.getEdgeSchema();
     }
 

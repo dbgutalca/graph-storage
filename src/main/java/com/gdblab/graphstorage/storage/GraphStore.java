@@ -3,7 +3,7 @@ package com.gdblab.graphstorage.storage;
 import org.rocksdb.*;
 
 import java.io.Closeable;
-import java.io.IOException;
+import java.io.IOException; // Asegúrate de que este import esté
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,67 +16,62 @@ public class GraphStore implements AutoCloseable {
     public static final String CF_NODES = "cf_nodes";
     public static final String CF_EDGES = "cf_edges";
     public static final String CF_INDEX = "cf_index";
-    public static final String CF_META = "cf_meta";
 
     private final RocksDB db;
     private final ColumnFamilyHandle cfDefault;
     private final ColumnFamilyHandle cfNodes;
     private final ColumnFamilyHandle cfEdges;
     private final ColumnFamilyHandle cfIndex;
-    private final ColumnFamilyHandle cfMeta;
 
-    // Servicios
     private final NodeStore nodeStore;
     private final EdgeStore edgeStore;
     private final IndexStore indexStore;
     private final GraphQueries queries;
     private final GraphIngestor ingestor;
     private final MetaStore metaStore;
+    private final Path dbPath;
 
     private GraphStore(RocksDB db,
                        ColumnFamilyHandle cfDefault,
                        ColumnFamilyHandle cfNodes,
                        ColumnFamilyHandle cfEdges,
                        ColumnFamilyHandle cfIndex,
-                       ColumnFamilyHandle cfMeta) {
+                       MetaStore metaStore,
+                       Path dbPath) {      
         this.db = db;
         this.cfDefault = cfDefault;
         this.cfNodes = cfNodes;
         this.cfEdges = cfEdges;
         this.cfIndex = cfIndex;
-        this.cfMeta = cfMeta;
+        this.metaStore = metaStore; 
+        this.dbPath = dbPath;
 
         this.nodeStore = new NodeStore(db, cfNodes);
         this.edgeStore = new EdgeStore(db, cfEdges);
         this.indexStore = new IndexStore(db, cfIndex);
-        this.metaStore = new MetaStore(db, cfMeta);
-        this.queries = new GraphQueries(nodeStore, edgeStore, indexStore, metaStore);
-        this.ingestor = new GraphIngestor(nodeStore, edgeStore, indexStore, metaStore);
+        this.queries = new GraphQueries(nodeStore, edgeStore, indexStore, this.metaStore);
+        this.ingestor = new GraphIngestor(nodeStore, edgeStore, indexStore, this.metaStore);
     }
 
-    // Abrir o crear si es necesario la base de datos 
    public static GraphStore open(Path dbPath) throws RocksDBException, IOException {
     RocksDB.loadLibrary();
     Files.createDirectories(dbPath);
 
-BlockBasedTableConfig tableCfg = new BlockBasedTableConfig()
-    .setCacheIndexAndFilterBlocks(true)
-    .setEnableIndexCompression(true);
-ColumnFamilyOptions cfAll = new ColumnFamilyOptions()
-    .setCompressionType(CompressionType.LZ4_COMPRESSION)
-    .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
-    .setTableFormatConfig(tableCfg);
+    BlockBasedTableConfig tableCfg = new BlockBasedTableConfig()
+        .setCacheIndexAndFilterBlocks(true)
+        .setEnableIndexCompression(true);
+    ColumnFamilyOptions cfAll = new ColumnFamilyOptions()
+        .setCompressionType(CompressionType.LZ4_COMPRESSION)
+        .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
+        .setTableFormatConfig(tableCfg);
 
 
-
-
-List<ColumnFamilyDescriptor> cfds = List.of(
-    new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, new ColumnFamilyOptions()),
-    new ColumnFamilyDescriptor(CF_NODES.getBytes(StandardCharsets.UTF_8), cfAll),
-    new ColumnFamilyDescriptor(CF_EDGES.getBytes(StandardCharsets.UTF_8), cfAll),
-    new ColumnFamilyDescriptor(CF_INDEX.getBytes(StandardCharsets.UTF_8), cfAll),
-    new ColumnFamilyDescriptor(CF_META.getBytes(StandardCharsets.UTF_8), cfAll)
-);
+    List<ColumnFamilyDescriptor> cfds = List.of(
+        new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, new ColumnFamilyOptions()),
+        new ColumnFamilyDescriptor(CF_NODES.getBytes(StandardCharsets.UTF_8), cfAll),
+        new ColumnFamilyDescriptor(CF_EDGES.getBytes(StandardCharsets.UTF_8), cfAll),
+        new ColumnFamilyDescriptor(CF_INDEX.getBytes(StandardCharsets.UTF_8), cfAll)
+    );
 
     List<ColumnFamilyHandle> handles = new ArrayList<>();
 
@@ -85,7 +80,10 @@ List<ColumnFamilyDescriptor> cfds = List.of(
             .setCreateMissingColumnFamilies(true);
 
     RocksDB db = RocksDB.open(dbo, dbPath.toString(), cfds, handles);
-    return new GraphStore(db, handles.get(0), handles.get(1), handles.get(2), handles.get(3), handles.get(4));
+
+    MetaStore metaStore = MetaStore.load(dbPath);
+
+    return new GraphStore(db, handles.get(0), handles.get(1), handles.get(2), handles.get(3), metaStore, dbPath);
 }
 
 
@@ -97,14 +95,20 @@ List<ColumnFamilyDescriptor> cfds = List.of(
 
     @Override
     public void close() {
+        try {
+            metaStore.save(dbPath);
+        } catch (IOException e) {
+            System.err.println("CRITICAL: Failed to save metadata on close: " + e.getMessage());
+            e.printStackTrace();
+        }
+
         safeClose(ingestor);
         safeClose(queries);
         safeClose(indexStore);
         safeClose(edgeStore);
         safeClose(nodeStore);
-        safeClose(metaStore);
+
         try { cfIndex.close(); } catch (Exception ignore) {}
-        try { cfMeta.close(); } catch (Exception ignore) {}
         try { cfEdges.close(); } catch (Exception ignore) {}
         try { cfNodes.close(); } catch (Exception ignore) {}
         try { cfDefault.close(); } catch (Exception ignore) {}
@@ -115,4 +119,3 @@ List<ColumnFamilyDescriptor> cfds = List.of(
         if (o instanceof Closeable c) { try { c.close(); } catch (IOException ignore) {} }
     }
 }
-
