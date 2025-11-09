@@ -1,4 +1,5 @@
 .vscode
 graphdb/
 gstore/
+target/
 GraphUsage.java
