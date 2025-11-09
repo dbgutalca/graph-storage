@@ -3,7 +3,7 @@ package com.gdblab.graphstorage.storage;
 import org.rocksdb.*;
 
 import java.io.Closeable;
-import java.io.IOException; 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,18 +32,18 @@ public class GraphStore implements AutoCloseable {
     private final Path dbPath;
 
     private GraphStore(RocksDB db,
-                       ColumnFamilyHandle cfDefault,
-                       ColumnFamilyHandle cfNodes,
-                       ColumnFamilyHandle cfEdges,
-                       ColumnFamilyHandle cfIndex,
-                       MetaStore metaStore,
-                       Path dbPath) {      
+            ColumnFamilyHandle cfDefault,
+            ColumnFamilyHandle cfNodes,
+            ColumnFamilyHandle cfEdges,
+            ColumnFamilyHandle cfIndex,
+            MetaStore metaStore,
+            Path dbPath) {
         this.db = db;
         this.cfDefault = cfDefault;
         this.cfNodes = cfNodes;
         this.cfEdges = cfEdges;
         this.cfIndex = cfIndex;
-        this.metaStore = metaStore; 
+        this.metaStore = metaStore;
         this.dbPath = dbPath;
 
         this.nodeStore = new NodeStore(db, cfNodes);
@@ -53,45 +53,89 @@ public class GraphStore implements AutoCloseable {
         this.ingestor = new GraphIngestor(nodeStore, edgeStore, indexStore, this.metaStore);
     }
 
-   public static GraphStore open(Path dbPath) throws RocksDBException, IOException {
+    public static GraphStore open(Path dbPath) throws RocksDBException, IOException {
     RocksDB.loadLibrary();
     Files.createDirectories(dbPath);
 
-    BlockBasedTableConfig tableCfg = new BlockBasedTableConfig()
-        .setCacheIndexAndFilterBlocks(true)
-        .setEnableIndexCompression(true);
-    ColumnFamilyOptions cfAll = new ColumnFamilyOptions()
-        .setCompressionType(CompressionType.LZ4_COMPRESSION)
-        .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
-        .setTableFormatConfig(tableCfg);
-
-
-    List<ColumnFamilyDescriptor> cfds = List.of(
-        new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, new ColumnFamilyOptions()),
-        new ColumnFamilyDescriptor(CF_NODES.getBytes(StandardCharsets.UTF_8), cfAll),
-        new ColumnFamilyDescriptor(CF_EDGES.getBytes(StandardCharsets.UTF_8), cfAll),
-        new ColumnFamilyDescriptor(CF_INDEX.getBytes(StandardCharsets.UTF_8), cfAll)
-    );
-
+    BlockBasedTableConfig tableConfig = null;
+    ColumnFamilyOptions cfAll = null;
+    ColumnFamilyOptions default_cfo = null;
+    DBOptions dbo = null;
+    List<ColumnFamilyDescriptor> cfds = null;
     List<ColumnFamilyHandle> handles = new ArrayList<>();
+    RocksDB db = null;
 
-    DBOptions dbo = new DBOptions()
-            .setCreateIfMissing(true)
-            .setCreateMissingColumnFamilies(true);
+    try {
 
-    RocksDB db = RocksDB.open(dbo, dbPath.toString(), cfds, handles);
+        tableConfig = new BlockBasedTableConfig();
+        tableConfig.setCacheIndexAndFilterBlocks(true)
+                   .setEnableIndexCompression(true);
 
-    MetaStore metaStore = MetaStore.load(dbPath);
+        cfAll = new ColumnFamilyOptions();
+        cfAll.setCompressionType(CompressionType.LZ4_COMPRESSION) 
+             .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
+             .setTableFormatConfig(tableConfig);
 
-    return new GraphStore(db, handles.get(0), handles.get(1), handles.get(2), handles.get(3), metaStore, dbPath);
+        default_cfo = new ColumnFamilyOptions(); 
+
+        cfds = List.of(
+                new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, default_cfo),
+                new ColumnFamilyDescriptor(CF_NODES.getBytes(StandardCharsets.UTF_8), cfAll),
+                new ColumnFamilyDescriptor(CF_EDGES.getBytes(StandardCharsets.UTF_8), cfAll),
+                new ColumnFamilyDescriptor(CF_INDEX.getBytes(StandardCharsets.UTF_8), cfAll));
+
+        dbo = new DBOptions(); 
+        dbo.setCreateIfMissing(true) 
+           .setCreateMissingColumnFamilies(true);
+
+        db = RocksDB.open(dbo, dbPath.toString(), cfds, handles);
+
+        MetaStore metaStore = MetaStore.load(dbPath);
+
+        return new GraphStore(db, handles.get(0), handles.get(1), handles.get(2), handles.get(3), metaStore,
+                dbPath);
+        
+    } catch (RocksDBException | IOException e) {
+        for (ColumnFamilyHandle handle : handles) {
+            try { handle.close(); } catch (Exception ignore) {}
+        }
+        if (db != null) {
+            try { db.close(); } catch (Exception ignore) {}
+        }
+        throw e;
+
+    } finally {
+        if (dbo != null) {
+            dbo.close();
+        }
+        if (cfAll != null) {
+            cfAll.close();
+        }
+        if (default_cfo != null) {
+            default_cfo.close();
+        }
+    }
 }
 
+    public NodeStore nodes() {
+        return nodeStore;
+    }
 
-    public NodeStore nodes() { return nodeStore; }
-    public EdgeStore edges() { return edgeStore; }
-    public GraphQueries queries() { return queries; }
-    public GraphIngestor ingestor() { return ingestor; }
-    public MetaStore meta() { return metaStore; }
+    public EdgeStore edges() {
+        return edgeStore;
+    }
+
+    public GraphQueries queries() {
+        return queries;
+    }
+
+    public GraphIngestor ingestor() {
+        return ingestor;
+    }
+
+    public MetaStore meta() {
+        return metaStore;
+    }
 
     @Override
     public void close() {
@@ -108,14 +152,34 @@ public class GraphStore implements AutoCloseable {
         safeClose(edgeStore);
         safeClose(nodeStore);
 
-        try { cfIndex.close(); } catch (Exception ignore) {}
-        try { cfEdges.close(); } catch (Exception ignore) {}
-        try { cfNodes.close(); } catch (Exception ignore) {}
-        try { cfDefault.close(); } catch (Exception ignore) {}
-        try { db.close(); } catch (Exception ignore) {}
+        try {
+            cfIndex.close();
+        } catch (Exception ignore) {
+        }
+        try {
+            cfEdges.close();
+        } catch (Exception ignore) {
+        }
+        try {
+            cfNodes.close();
+        } catch (Exception ignore) {
+        }
+        try {
+            cfDefault.close();
+        } catch (Exception ignore) {
+        }
+        try {
+            db.close();
+        } catch (Exception ignore) {
+        }
     }
 
     private static void safeClose(Object o) {
-        if (o instanceof Closeable c) { try { c.close(); } catch (IOException ignore) {} }
+        if (o instanceof Closeable c) {
+            try {
+                c.close();
+            } catch (IOException ignore) {
+            }
+        }
     }
 }
