@@ -36,27 +36,6 @@ public class GraphQueries implements Closeable {
         return edges.get(edgeId);
     }
 
-    /*
-     * public Iterable<EdgeEntry> getEdgeIteratorByLabel(String label){
-     * List<String> ids = new ArrayList<>();
-     * index.forEachEdgeIdByLabel(label,ids::add);
-     * return () -> ids.stream().map(id -> {
-     * try { return new EdgeEntry(id, edges.get(id));}
-     * catch (RocksDBException e) { throw new RuntimeException(e); }
-     * }).iterator();
-     * }
-     * 
-     * // Neighbors
-     * public Iterable<EdgeEntry> getNeighbours(String nodeId){
-     * List<String> ids = new ArrayList<>();
-     * index.forEachEdgeIdBySrc(nodeId, ids::add);
-     * index.forEachEdgeIdByDst(nodeId, ids::add);
-     * return () -> ids.stream().map(id -> {
-     * try { return new EdgeEntry(id, edges.get(id)); }
-     * catch (RocksDBException e) { throw new RuntimeException(e); }
-     * }).iterator();
-     * }
-     */
 
     // Structure
     public long getNodesQuantity() {
@@ -109,7 +88,6 @@ public class GraphQueries implements Closeable {
     public record EdgeEntry(String id, EdgeBlob blob) {
     }
 
-    // CHANGES for lazy iterables
     private <T, R> AutoCloseableIterable<R> mapLazy(
             AutoCloseableIterable<T> source,
             Function<T, R> mapper) {
