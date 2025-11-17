@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
 
 // Metadara now works in memory and with JSON for readability
 class MetaStore {
@@ -25,12 +26,29 @@ class MetaStore {
     private final Map<String, Set<String>> nodeSchema;
     private final Map<String, Set<String>> edgeSchema;
 
+    private final Map<String, Set<EdgeConnection>> edgeConnections;
+
+    public static record EdgeConnection(String srcLabel, String dstLabel){
+        @Override
+        public boolean equals(Object o){
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            EdgeConnection that = (EdgeConnection) o;
+            return Objects.equals(srcLabel, that.srcLabel) && Objects.equals(dstLabel, that.dstLabel);
+        }
+        @Override
+        public int hashCode(){
+            return Objects.hash(srcLabel, dstLabel);
+        }
+    }
+
     private static class MetaData {
         long nodeCount;
         long edgeCount;
         Map<String, Long> edgeCountByLabel;
         Map<String, Set<String>> nodeSchema;
         Map<String, Set<String>> edgeSchema;
+        Map<String, Set<EdgeConnection>> edgeConnections;
     }
 
     private MetaStore() {
@@ -39,6 +57,7 @@ class MetaStore {
         this.edgeCountByLabel = new ConcurrentHashMap<>();
         this.nodeSchema = new ConcurrentHashMap<>();
         this.edgeSchema = new ConcurrentHashMap<>();
+        this.edgeConnections = new ConcurrentHashMap<>();
     }
 
     // load metastore from file
@@ -58,6 +77,11 @@ class MetaStore {
             metaStore.edgeCountByLabel.putAll(data.edgeCountByLabel);
             metaStore.nodeSchema.putAll(data.nodeSchema);
             metaStore.edgeSchema.putAll(data.edgeSchema);
+
+            if (data.edgeConnections != null){
+                metaStore.edgeConnections.putAll(data.edgeConnections);
+            }
+
             return metaStore;
         }
     }
@@ -72,6 +96,7 @@ class MetaStore {
         data.edgeCountByLabel = this.edgeCountByLabel;
         data.nodeSchema = this.nodeSchema;
         data.edgeSchema = this.edgeSchema;
+        data.edgeConnections = this.edgeConnections;
 
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         try (FileWriter writer = new FileWriter(metaFile.toFile())) {
@@ -109,6 +134,14 @@ class MetaStore {
         edgeSchema.computeIfAbsent(label, k -> new LinkedHashSet<>()).add(prop);
     }
 
+    public void addEdgeConnection(String edgeLabel, String srcLabel, String dstLabel){
+        if (srcLabel == null || dstLabel == null){
+            return;
+        }
+        Set<EdgeConnection> connections = edgeConnections.computeIfAbsent(edgeLabel, k -> new LinkedHashSet<>());
+        connections.add(new EdgeConnection(srcLabel, dstLabel));
+    }
+
     // Reading methods
 
     public long getNodeCount() { return this.nodeCount; }
@@ -116,4 +149,19 @@ class MetaStore {
     public Map<String, Long> getEdgeCountsByLabel() { return new LinkedHashMap<>(this.edgeCountByLabel); }
     public Map<String, Set<String>> getNodeSchema() { return new LinkedHashMap<>(this.nodeSchema); }
     public Map<String, Set<String>> getEdgeSchema() { return new LinkedHashMap<>(this.edgeSchema); }
+    public Map<String, Set<MetaStore.EdgeConnection>> getEdgeConnections(){
+        return new LinkedHashMap<>(this.edgeConnections);
+    }
+    public String toJsonString() {
+        MetaData data = new MetaData();
+        data.nodeCount = this.nodeCount;
+        data.edgeCount = this.edgeCount;
+        data.edgeCountByLabel = this.edgeCountByLabel;
+        data.nodeSchema = this.nodeSchema;
+        data.edgeSchema = this.edgeSchema;
+
+        Gson compactGson = new Gson();
+        
+        return compactGson.toJson(data);
+    }
 }

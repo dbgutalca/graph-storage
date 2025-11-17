@@ -18,9 +18,11 @@ public class GraphIngestor implements Closeable {
     private final ColumnFamilyHandle cfIndex;
     private final MetaStore metaStore;
 
+    private Map<String, String> nodeIdToLabelCache;
+
     // Constants for batching insertion
-    // 32MB (32 * 1024 * 1024 bytes)
-    private static final long MAX_BATCH_SIZE_BYTES = 33_554_432L; 
+    // 16MB (16 * 1024 * 1024 bytes)
+    private static final long MAX_BATCH_SIZE_BYTES = 16_777_216L; 
     private static final byte[] EMPTY_VALUE = new byte[0];
 
     GraphIngestor(RocksDB db,
@@ -33,10 +35,12 @@ public class GraphIngestor implements Closeable {
         this.cfEdges = cfEdges;
         this.cfIndex = cfIndex;
         this.metaStore = metaStore;
+
+        this.nodeIdToLabelCache = new HashMap<>();
     }
 
     public void ingestNodes(Path nodesPgdf) throws IOException, RocksDBException {
-        
+
         WriteOptions writeOptions = new WriteOptions(); 
         WriteBatch batch = new WriteBatch(); 
         long currentBatchBytes = 0; 
@@ -71,6 +75,9 @@ public class GraphIngestor implements Closeable {
                     String v = e.getValue()==null? "" : e.getValue();
                     props.put(k, v);
                 }
+
+                // Save id -> label in cache
+                nodeIdToLabelCache.put(nodeId, label);
 
                 //  Prepare lbytes fot batch insert
                 byte[] nodeKey = KeySchema.keyNode(nodeId);
@@ -211,6 +218,9 @@ public class GraphIngestor implements Closeable {
                     currentBatchBytes += indexKey.length;
                 }
 
+                // update schema
+                metaStore.addEdgeConnection(label, nodeIdToLabelCache.get(src), nodeIdToLabelCache.get(dst));
+
                 batchEdgeCount++;
                 batchEdgeCountByLabel.merge(label, 1L, Long::sum);
                 Set<String> propsForLabel = batchEdgeProps.computeIfAbsent(label, k -> new HashSet<>());
@@ -252,5 +262,10 @@ public class GraphIngestor implements Closeable {
         }
     }
 
-    @Override public void close() throws IOException { }
+    @Override public void close() throws IOException {
+        if (nodeIdToLabelCache != null){
+            nodeIdToLabelCache.clear();
+            nodeIdToLabelCache = null;
+        }
+     }
 }

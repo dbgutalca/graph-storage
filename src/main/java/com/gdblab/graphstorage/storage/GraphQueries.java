@@ -6,10 +6,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.NoSuchElementException;
 
+
 import org.rocksdb.RocksDBException;
 
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable;
 import com.gdblab.graphstorage.storage.Utils.GraphStorageException;
+import com.gdblab.graphstorage.storage.MetaStore.EdgeConnection;
 
 import java.util.*;
 
@@ -56,6 +58,9 @@ public class GraphQueries implements Closeable {
 
     public Map<String, Set<String>> getEdgesStructure() {
         return meta.getEdgeSchema();
+    }
+    public String getJsonMetadata() {
+        return meta.toJsonString(); 
     }
 
     public void forEachEdgeIdByLabel(String label, Consumer<String> consumer) {

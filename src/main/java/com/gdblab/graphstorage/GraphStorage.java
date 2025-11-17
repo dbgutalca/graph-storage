@@ -181,4 +181,9 @@ public class GraphStorage implements AutoCloseable {
     public Map<String, Set<String>> getEdgesStructure () throws GraphStorageException {
         return store.queries().getEdgesStructure();
     }
+
+    public String getJsonMetadata() throws GraphStorageException {
+        return store.queries().getJsonMetadata();
+    }
+
 }
