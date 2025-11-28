@@ -133,18 +133,7 @@ public class GraphQueries implements Closeable {
     }
 
     public AutoCloseableIterable<EdgeEntry> getEdgeIteratorByLabel(String label) {
-        AutoCloseableIterable<String> ids = index.getEdgeIdsByLabel(label);
-
-        return mapLazy(ids, id -> {
-            try {
-                EdgeBlob blob = edges.get(id);
-                if (blob == null)
-                    return null;
-                return new EdgeEntry(id, blob);
-            } catch (RocksDBException e) {
-                throw new GraphStorageException("Failed to get edge with ID: " + id, e);
-            }
-        });
+        return index.getEdgeEntriesByLabel(label);
     }
 
     public AutoCloseableIterable<EdgeEntry> getNeighbours(String nodeId) {

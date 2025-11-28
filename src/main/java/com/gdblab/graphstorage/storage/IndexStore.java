@@ -6,6 +6,7 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable;
+import com.gdblab.graphstorage.storage.GraphQueries.EdgeEntry;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -177,6 +178,51 @@ class IndexStore  {
         return scanLazy(KeySchema.idxPrefix("propEdge", propName, KeySchema.norm(propValue)));
     }
     
+    public AutoCloseableIterable<EdgeEntry> getEdgeEntriesByLabel(String label) {
+    byte[] prefix = KeySchema.idxPrefix("label", "edge", label);
+    final RocksIterator it = db.newIterator(cfIndex);
+
+    return new AutoCloseableIterable<EdgeEntry>() {
+        private boolean closed = false;
+
+        @Override
+        public Iterator<EdgeEntry> iterator() {
+            if (closed) throw new IllegalStateException("Closed");
+            it.seek(prefix);
+
+            return new Iterator<EdgeEntry>() {
+                private EdgeEntry nextVal = null;
+
+                @Override
+                public boolean hasNext() {
+                    if (nextVal != null) return true;
+                    if (!it.isValid()) return false;
+                    if (!KeySchema.startsWith(it.key(), prefix)) return false;
+
+                    String id = KeySchema.suffixAfterPrefix(it.key(), prefix);
+                    
+                    EdgeBlob blob = EdgeBlob.decode(it.value());
+                    nextVal = new EdgeEntry(id, blob);
+                    it.next();
+                    return true;
+                }
+
+                @Override
+                public EdgeEntry next() {
+                    if (!hasNext()) throw new NoSuchElementException();
+                    EdgeEntry ret = nextVal;
+                    nextVal = null;
+                    return ret;
+                }
+            };
+        }
+
+        @Override
+        public void close() {
+            if (!closed) { it.close(); closed = true; }
+        }
+    };
+}
 
     static final byte[] EMPTY_VALUE = new byte[0];
 

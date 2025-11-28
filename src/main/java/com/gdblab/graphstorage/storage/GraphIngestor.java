@@ -190,7 +190,7 @@ public class GraphIngestor implements Closeable {
                 currentBatchBytes += edgeKey.length + edgeValue.length;
 
                 byte[] idxLabelKey = KeySchema.idxKey("label","edge", label, edgeId);
-                batch.put(cfIndex, idxLabelKey, EMPTY_VALUE);
+                batch.put(cfIndex, idxLabelKey, edgeValue);
                 currentBatchBytes += idxLabelKey.length;
 
                 byte[] idxSrcNodeKey = KeySchema.idxKey("label","srcnodes", label, src);

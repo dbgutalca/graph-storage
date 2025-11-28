@@ -1,7 +1,10 @@
 graphdb/
 gstore/
+db_*/
 target/
 GraphUsage.java
+GraphUsage2.java
+sf*/
 
 pom.xml.tag
 pom.xml.releaseBackup
