@@ -74,7 +74,11 @@ public class GraphStore implements AutoCloseable {
         cfAll = new ColumnFamilyOptions();
         cfAll.setCompressionType(CompressionType.LZ4_COMPRESSION) 
              .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
-             .setTableFormatConfig(tableConfig);
+             .setTableFormatConfig(tableConfig)
+             .setWriteBufferSize(128*1014*1024) //128MB per memtable
+             .setMaxWriteBufferNumber(4)
+             .setMinWriteBufferNumberToMerge(2);
+              
 
         default_cfo = new ColumnFamilyOptions(); 
 
@@ -86,7 +90,8 @@ public class GraphStore implements AutoCloseable {
 
         dbo = new DBOptions(); 
         dbo.setCreateIfMissing(true) 
-           .setCreateMissingColumnFamilies(true);
+           .setCreateMissingColumnFamilies(true)
+           .setMaxBackgroundJobs(Runtime.getRuntime().availableProcessors());
 
         db = RocksDB.open(dbo, dbPath.toString(), cfds, handles);
 

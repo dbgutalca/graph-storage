@@ -20,53 +20,10 @@ class IndexStore  {
         this.db = db;
         this.cfIndex = cfIndex;
     }
-
-    // writing indexes 
-    public void putNodePropEq(String propName, String propValue, String nodeId) throws RocksDBException {
-        String norm = KeySchema.norm(propValue);
-        byte[] k = KeySchema.idxKey("prop", propName, norm, nodeId);
-        db.put(cfIndex, k, EMPTY_VALUE);
-    }
-
-    public void putEdgePropEq(String propName, String propValue, String edgeId) throws RocksDBException {
-        String norm = KeySchema.norm(propValue);
-        byte[] k = KeySchema.idxKey("propEdge", propName, norm, edgeId);
-        db.put(cfIndex, k, EMPTY_VALUE);
-    }
-
-    public void putEdgeLabel(String label, String edgeId) throws RocksDBException {
-        db.put(cfIndex, KeySchema.idxKey("label","edge", label, edgeId), EMPTY_VALUE);
-    }
-
-    public void putSrcNodeByLabel(String label, String srcNodeId) throws RocksDBException {
-        db.put(cfIndex, KeySchema.idxKey("label","srcnodes", label, srcNodeId), EMPTY_VALUE);
-    }
-
-    public void putDstNodeByLabel(String label, String dstNodeId) throws RocksDBException {
-        db.put(cfIndex, KeySchema.idxKey("label","dstnodes", label, dstNodeId), EMPTY_VALUE);
-    }
-
-    public void putEdgeBySrc(String srcNodeId, String EdgeId) throws RocksDBException{
-        db.put(cfIndex, KeySchema.idxKey("edgesBySrc", srcNodeId, EdgeId), EMPTY_VALUE);
-    }
-
-    public void putEdgeByDst(String dstNodeId,  String EdgeId) throws RocksDBException{
-        db.put(cfIndex, KeySchema.idxKey("edgesByDst", dstNodeId, EdgeId), EMPTY_VALUE);
-    }
-
+  
     // Reading idxs by their prefix
     public void forEachEdgeIdByLabel(String label, Consumer<String> consumer){
         byte[] prefix = KeySchema.idxPrefix("label","edge",label);
-        scan(prefix, consumer);
-    }
-
-    public void forEachSourceNodeByLabel(String label, Consumer<String> consumer){
-        byte[] prefix = KeySchema.idxPrefix("label","srcnodes",label);
-        scan(prefix, consumer);
-    }
-
-    public void forEachDestinationNodeByLabel(String label, Consumer<String> consumer){
-        byte[] prefix = KeySchema.idxPrefix("label","dstnodes",label);
         scan(prefix, consumer);
     }
 

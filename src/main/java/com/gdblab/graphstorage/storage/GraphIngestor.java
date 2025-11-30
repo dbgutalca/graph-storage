@@ -21,9 +21,10 @@ public class GraphIngestor implements Closeable {
     private Map<String, String> nodeIdToLabelCache;
 
     // Constants for batching insertion
-    // 16MB (16 * 1024 * 1024 bytes)
-    private static final long MAX_BATCH_SIZE_BYTES = 16_777_216L; 
+    private static final long MAX_BATCH_SIZE_BYTES = 16_777_216L; // 16MB
     private static final byte[] EMPTY_VALUE = new byte[0];
+
+    private final ArrayList<String> reuseCols = new ArrayList<>(100);
 
     GraphIngestor(RocksDB db,
                     ColumnFamilyHandle cfNodes,
@@ -35,86 +36,83 @@ public class GraphIngestor implements Closeable {
         this.cfEdges = cfEdges;
         this.cfIndex = cfIndex;
         this.metaStore = metaStore;
-
         this.nodeIdToLabelCache = new HashMap<>();
     }
 
     public void ingestNodes(Path nodesPgdf) throws IOException, RocksDBException {
-
+        
         WriteOptions writeOptions = new WriteOptions(); 
+        writeOptions.setDisableWAL(true);
+        writeOptions.setSync(false);
         WriteBatch batch = new WriteBatch(); 
         long currentBatchBytes = 0; 
 
-        // counters for metastore
         long batchNodeCount = 0;
         Set<String> batchNodeLabels = new HashSet<>();
         Map<String, Set<String>> batchNodeProps = new HashMap<>();
 
         try (BufferedReader br = Files.newBufferedReader(nodesPgdf, StandardCharsets.UTF_8)) {
-            String line; String[] header = null;
+            String line; 
+            String[] header = null;
+            
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) continue;
+                
                 if (line.startsWith("@")) {
                     header = Arrays.stream(line.split("\\|")).map(String::trim).toArray(String[]::new);
                     continue;
                 }
                 if (header == null) continue;
 
-                //parsing
-                String[] cols = line.split("\\|", -1);
-                Map<String,String> row = new LinkedHashMap<>();
-                for (int i=0;i<header.length && i<cols.length;i++) row.put(header[i], cols[i]);
+                fastSplit(line, reuseCols);
+                
+                String nodeId = "";
+                String label = "";
+                Map<String, String> props = new LinkedHashMap<>();
 
-                String nodeId = row.getOrDefault("@id","" ).trim();
-                String label  = row.getOrDefault("@label","" ).trim();
-                if (nodeId.isEmpty() || label.isEmpty()) continue;
+                for (int i = 0; i < header.length; i++) {
+                    String val = (i < reuseCols.size()) ? reuseCols.get(i) : "";
+                    String key = header[i];
 
-                Map<String,String> props = new LinkedHashMap<>();
-                for (var e : row.entrySet()){
-                    String k = e.getKey(); if (k.startsWith("@")) continue; 
-                    String v = e.getValue()==null? "" : e.getValue();
-                    props.put(k, v);
+                    if (key.equals("@id")) {
+                        nodeId = val.trim();
+                    } else if (key.equals("@label")) {
+                        label = val.trim();
+                    } else if (!key.startsWith("@")) {
+                        props.put(key, val);
+                    }
                 }
 
-                // Save id -> label in cache
+                if (nodeId.isEmpty() || label.isEmpty()) continue;
+
                 nodeIdToLabelCache.put(nodeId, label);
 
-                //  Prepare lbytes fot batch insert
                 byte[] nodeKey = KeySchema.keyNode(nodeId);
                 byte[] nodeValue = NodeBlob.encode(label, props);
 
-                // add to batch
                 batch.put(cfNodes, nodeKey, nodeValue);
                 currentBatchBytes += nodeKey.length + nodeValue.length;
 
-                // índexes to the batch
                 for (var e : props.entrySet()){
                     if (e.getValue()==null || e.getValue().isEmpty()) continue;
                     String normValue = KeySchema.norm(e.getValue());
                     byte[] indexKey = KeySchema.idxKey("prop", e.getKey(), normValue, nodeId);
-                    
                     batch.put(cfIndex, indexKey, EMPTY_VALUE);
                     currentBatchBytes += indexKey.length;
                 }
                 
-                //counters
                 batchNodeCount++;
                 batchNodeLabels.add(label);
                 Set<String> propsForLabel = batchNodeProps.computeIfAbsent(label, k -> new HashSet<>());
                 propsForLabel.addAll(props.keySet());
 
-                // write when the batch is bigger than the limit
                 if (currentBatchBytes > MAX_BATCH_SIZE_BYTES) {
                     db.write(writeOptions, batch);
-                    
-                    //update metastore
                     metaStore.incNodeCount(batchNodeCount);
                     batchNodeLabels.forEach(metaStore::addNodeLabel);
                     batchNodeProps.forEach((lbl, propSet) -> 
                         propSet.forEach(p -> metaStore.addNodeProp(lbl, p))
                     );
-
-                    // start again 
                     batch.close(); 
                     batch = new WriteBatch();
                     currentBatchBytes = 0;
@@ -124,10 +122,8 @@ public class GraphIngestor implements Closeable {
                 }
             } 
             
-            // write the last batch
             if (batchNodeCount > 0) {
                 db.write(writeOptions, batch);
-                
                 metaStore.incNodeCount(batchNodeCount);
                 batchNodeLabels.forEach(metaStore::addNodeLabel);
                 batchNodeProps.forEach((lbl, propSet) -> 
@@ -144,6 +140,8 @@ public class GraphIngestor implements Closeable {
     public void ingestEdges(Path edgesPgdf) throws IOException, RocksDBException {
         
         WriteOptions writeOptions = new WriteOptions();
+        writeOptions.setDisableWAL(true);
+        writeOptions.setSync(false);
         WriteBatch batch = new WriteBatch();
         long currentBatchBytes = 0;
 
@@ -152,36 +150,45 @@ public class GraphIngestor implements Closeable {
         Map<String, Set<String>> batchEdgeProps = new HashMap<>();
 
         try (BufferedReader br = Files.newBufferedReader(edgesPgdf, StandardCharsets.UTF_8)) {
-            String line; String[] header = null;
+            String line; 
+            String[] header = null;
+            
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) continue;
+                
                 if (line.startsWith("@")) {
                     header = Arrays.stream(line.split("\\|")).map(String::trim).toArray(String[]::new);
                     continue;
                 }
                 if (header == null) continue;
 
-                String[] cols = line.split("\\|", -1);
-                Map<String,String> row = new LinkedHashMap<>();
-                for (int i=0;i<header.length && i<cols.length;i++) row.put(header[i], cols[i]);
+                fastSplit(line, reuseCols);
 
-                String edgeId = row.getOrDefault("@id","" ).trim();
-                String label  = row.getOrDefault("@label","" ).trim();
-                String dir    = row.getOrDefault("@dir","T").trim();
-                String src    = row.getOrDefault("@out","" ).trim();
-                String dst    = row.getOrDefault("@in",""  ).trim();
+                String edgeId = "";
+                String label = "";
+                String dir = "T";
+                String src = "";
+                String dst = "";
+                Map<String, String> props = new LinkedHashMap<>();
+
+                for (int i = 0; i < header.length; i++) {
+                    String val = (i < reuseCols.size()) ? reuseCols.get(i) : "";
+                    String key = header[i];
+
+                    if (key.equals("@id")) edgeId = val.trim();
+                    else if (key.equals("@label")) label = val.trim();
+                    else if (key.equals("@out")) src = val.trim();
+                    else if (key.equals("@in")) dst = val.trim();
+                    else if (key.equals("@dir")) dir = val.trim();
+                    else if (!key.startsWith("@")) {
+                        props.put(key, val);
+                    }
+                }
+
                 if (label.isEmpty() || src.isEmpty() || dst.isEmpty()) continue;
                 if (!"T".equalsIgnoreCase(dir)) continue; 
-
+                
                 if (edgeId.isEmpty()) edgeId = KeySchema.makeEdgeId(src, label, dst);
-
-                Map<String,String> props = new LinkedHashMap<>();
-                for (var e : row.entrySet()){
-                    String k = e.getKey();
-                    if (k.startsWith("@")) continue;
-                    String v = e.getValue()==null? "" : e.getValue();
-                    props.put(k, v);
-                }
 
                 byte[] edgeKey = KeySchema.keyEdge(edgeId);
                 byte[] edgeValue = EdgeBlob.encode(label, src, dst, props);
@@ -190,36 +197,28 @@ public class GraphIngestor implements Closeable {
                 currentBatchBytes += edgeKey.length + edgeValue.length;
 
                 byte[] idxLabelKey = KeySchema.idxKey("label","edge", label, edgeId);
-                batch.put(cfIndex, idxLabelKey, edgeValue);
+                batch.put(cfIndex, idxLabelKey, edgeValue); 
                 currentBatchBytes += idxLabelKey.length;
 
-                byte[] idxSrcNodeKey = KeySchema.idxKey("label","srcnodes", label, src);
-                batch.put(cfIndex, idxSrcNodeKey, EMPTY_VALUE);
-                currentBatchBytes += idxSrcNodeKey.length;
-                
-                byte[] idxDstNodeKey = KeySchema.idxKey("label","dstnodes", label, dst);
-                batch.put(cfIndex, idxDstNodeKey, EMPTY_VALUE);
-                currentBatchBytes += idxDstNodeKey.length;
-                
                 byte[] idxBySrcKey = KeySchema.idxKey("edgesBySrc", src, edgeId);
-                batch.put(cfIndex, idxBySrcKey, EMPTY_VALUE);
+                batch.put(cfIndex, idxBySrcKey, EMPTY_VALUE); 
                 currentBatchBytes += idxBySrcKey.length;
 
                 byte[] idxByDstKey = KeySchema.idxKey("edgesByDst", dst, edgeId);
-                batch.put(cfIndex, idxByDstKey, EMPTY_VALUE);
+                batch.put(cfIndex, idxByDstKey, EMPTY_VALUE); 
                 currentBatchBytes += idxByDstKey.length;
 
                 for (var e : props.entrySet()){
                     if (e.getValue()==null || e.getValue().isEmpty()) continue;
                     String normValue = KeySchema.norm(e.getValue());
                     byte[] indexKey = KeySchema.idxKey("propEdge", e.getKey(), normValue, edgeId);
-                    
                     batch.put(cfIndex, indexKey, EMPTY_VALUE);
                     currentBatchBytes += indexKey.length;
                 }
 
-                // update schema
-                metaStore.addEdgeConnection(label, nodeIdToLabelCache.get(src), nodeIdToLabelCache.get(dst));
+                String srcLabel = nodeIdToLabelCache.get(src);
+                String dstLabel = nodeIdToLabelCache.get(dst);
+                metaStore.addEdgeConnection(label, srcLabel, dstLabel);
 
                 batchEdgeCount++;
                 batchEdgeCountByLabel.merge(label, 1L, Long::sum);
@@ -228,14 +227,12 @@ public class GraphIngestor implements Closeable {
 
                 if (currentBatchBytes > MAX_BATCH_SIZE_BYTES) {
                     db.write(writeOptions, batch);
-                    
                     metaStore.incEdgeCount(batchEdgeCount);
                     metaStore.addEdgeLabel(label);
                     batchEdgeCountByLabel.forEach(metaStore::incEdgeCountByLabel);
                     batchEdgeProps.forEach((lbl, propSet) -> 
                         propSet.forEach(p -> metaStore.addEdgeProp(lbl, p))
                     );
-
                     batch.close();
                     batch = new WriteBatch();
                     currentBatchBytes = 0;
@@ -247,7 +244,6 @@ public class GraphIngestor implements Closeable {
 
             if (batchEdgeCount > 0) {
                 db.write(writeOptions, batch);
-                
                 metaStore.incEdgeCount(batchEdgeCount);
                 batchEdgeCountByLabel.forEach(metaStore::incEdgeCountByLabel);
                 batchEdgeCountByLabel.keySet().forEach(metaStore::addEdgeLabel); 
@@ -267,5 +263,16 @@ public class GraphIngestor implements Closeable {
             nodeIdToLabelCache.clear();
             nodeIdToLabelCache = null;
         }
-     }
+    }
+
+    private void fastSplit(String text, ArrayList<String> buffer) {
+        buffer.clear();
+        int start = 0;
+        int end;
+        while ((end = text.indexOf('|', start)) != -1) {
+            buffer.add(text.substring(start, end));
+            start = end + 1;
+        }
+        buffer.add(text.substring(start));
+    }
 }

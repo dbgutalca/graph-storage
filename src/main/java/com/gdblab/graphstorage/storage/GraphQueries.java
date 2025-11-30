@@ -67,14 +67,6 @@ public class GraphQueries implements Closeable {
         index.forEachEdgeIdByLabel(label, consumer);
     }
 
-    public void forEachSourceNodeByLabel(String label, Consumer<String> consumer) {
-        index.forEachSourceNodeByLabel(label, consumer);
-    }
-
-    public void forEachDestinationNodeByLabel(String label, Consumer<String> consumer) {
-        index.forEachDestinationNodeByLabel(label, consumer);
-    }
-
     public void forEachNodeByPropertyEquals(String propName, String propValue, Consumer<String> consumer) {
         index.forEachNodeByPropertyEquals(propName, propValue, consumer);
     }
