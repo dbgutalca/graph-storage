@@ -5,6 +5,7 @@ target/
 GraphUsage.java
 GraphUsage2.java
 TimeTime.java
+QuerySpeedTest.java
 sf*/
 
 pom.xml.tag
