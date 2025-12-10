@@ -1,6 +1,7 @@
 graphdb/
 gstore/
 db_*/
+default/
 target/
 GraphUsage.java
 GraphUsage2.java

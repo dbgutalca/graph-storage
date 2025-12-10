@@ -20,17 +20,12 @@ public class GraphIngestor implements Closeable {
 
     private Map<String, String> nodeIdToLabelCache;
 
-    // Constants for batching insertion
-    private static final long MAX_BATCH_SIZE_BYTES = 16_777_216L; // 16MB
+    private static final long MAX_BATCH_SIZE_BYTES = 16_777_216L; 
     private static final byte[] EMPTY_VALUE = new byte[0];
 
     private final ArrayList<String> reuseCols = new ArrayList<>(100);
 
-    GraphIngestor(RocksDB db,
-                    ColumnFamilyHandle cfNodes,
-                    ColumnFamilyHandle cfEdges,
-                    ColumnFamilyHandle cfIndex,
-                    MetaStore metaStore) {
+    GraphIngestor(RocksDB db, ColumnFamilyHandle cfNodes, ColumnFamilyHandle cfEdges, ColumnFamilyHandle cfIndex, MetaStore metaStore) {
         this.db = db;
         this.cfNodes = cfNodes;
         this.cfEdges = cfEdges;
@@ -48,6 +43,7 @@ public class GraphIngestor implements Closeable {
         long currentBatchBytes = 0; 
 
         long batchNodeCount = 0;
+        Map<String, Long> batchNodeCountByLabel = new HashMap<>();
         Set<String> batchNodeLabels = new HashSet<>();
         Map<String, Set<String>> batchNodeProps = new HashMap<>();
 
@@ -57,7 +53,6 @@ public class GraphIngestor implements Closeable {
             
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) continue;
-                
                 if (line.startsWith("@")) {
                     header = Arrays.stream(line.split("\\|")).map(String::trim).toArray(String[]::new);
                     continue;
@@ -74,13 +69,9 @@ public class GraphIngestor implements Closeable {
                     String val = (i < reuseCols.size()) ? reuseCols.get(i) : "";
                     String key = header[i];
 
-                    if (key.equals("@id")) {
-                        nodeId = val.trim();
-                    } else if (key.equals("@label")) {
-                        label = val.trim();
-                    } else if (!key.startsWith("@")) {
-                        props.put(key, val);
-                    }
+                    if (key.equals("@id")) nodeId = val.trim();
+                    else if (key.equals("@label")) label = val.trim();
+                    else if (!key.startsWith("@")) props.put(key, val);
                 }
 
                 if (nodeId.isEmpty() || label.isEmpty()) continue;
@@ -102,39 +93,40 @@ public class GraphIngestor implements Closeable {
                 }
                 
                 batchNodeCount++;
+                batchNodeCountByLabel.merge(label, 1L, Long::sum);
                 batchNodeLabels.add(label);
                 Set<String> propsForLabel = batchNodeProps.computeIfAbsent(label, k -> new HashSet<>());
                 propsForLabel.addAll(props.keySet());
 
                 if (currentBatchBytes > MAX_BATCH_SIZE_BYTES) {
-                    db.write(writeOptions, batch);
-                    metaStore.incNodeCount(batchNodeCount);
-                    batchNodeLabels.forEach(metaStore::addNodeLabel);
-                    batchNodeProps.forEach((lbl, propSet) -> 
-                        propSet.forEach(p -> metaStore.addNodeProp(lbl, p))
-                    );
+                    flushNodesBatch(writeOptions, batch, batchNodeCount, batchNodeCountByLabel, batchNodeLabels, batchNodeProps);
+                    
                     batch.close(); 
                     batch = new WriteBatch();
                     currentBatchBytes = 0;
                     batchNodeCount = 0;
+                    batchNodeCountByLabel.clear();
                     batchNodeLabels.clear();
                     batchNodeProps.clear();
                 }
             } 
             
             if (batchNodeCount > 0) {
-                db.write(writeOptions, batch);
-                metaStore.incNodeCount(batchNodeCount);
-                batchNodeLabels.forEach(metaStore::addNodeLabel);
-                batchNodeProps.forEach((lbl, propSet) -> 
-                    propSet.forEach(p -> metaStore.addNodeProp(lbl, p))
-                );
+                flushNodesBatch(writeOptions, batch, batchNodeCount, batchNodeCountByLabel, batchNodeLabels, batchNodeProps);
             }
 
         } finally {
             batch.close();
             writeOptions.close();
         }
+    }
+
+    private void flushNodesBatch(WriteOptions wo, WriteBatch batch, long count, Map<String, Long> countsByLabel, Set<String> labels, Map<String, Set<String>> props) throws RocksDBException {
+        db.write(wo, batch);
+        metaStore.incNodeCount(count);
+        countsByLabel.forEach(metaStore::incNodeCountByLabel);
+        labels.forEach(metaStore::addNodeLabel);
+        props.forEach((lbl, propSet) -> propSet.forEach(p -> metaStore.addNodeProp(lbl, p)));
     }
 
     public void ingestEdges(Path edgesPgdf) throws IOException, RocksDBException {
@@ -147,6 +139,9 @@ public class GraphIngestor implements Closeable {
 
         long batchEdgeCount = 0;
         Map<String, Long> batchEdgeCountByLabel = new HashMap<>();
+        
+        Map<String, Map<MetaStore.EdgeConnection, Long>> batchConnCounts = new HashMap<>();
+        
         Map<String, Set<String>> batchEdgeProps = new HashMap<>();
 
         try (BufferedReader br = Files.newBufferedReader(edgesPgdf, StandardCharsets.UTF_8)) {
@@ -155,7 +150,6 @@ public class GraphIngestor implements Closeable {
             
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) continue;
-                
                 if (line.startsWith("@")) {
                     header = Arrays.stream(line.split("\\|")).map(String::trim).toArray(String[]::new);
                     continue;
@@ -180,9 +174,7 @@ public class GraphIngestor implements Closeable {
                     else if (key.equals("@out")) src = val.trim();
                     else if (key.equals("@in")) dst = val.trim();
                     else if (key.equals("@dir")) dir = val.trim();
-                    else if (!key.startsWith("@")) {
-                        props.put(key, val);
-                    }
+                    else if (!key.startsWith("@")) props.put(key, val);
                 }
 
                 if (label.isEmpty() || src.isEmpty() || dst.isEmpty()) continue;
@@ -218,7 +210,12 @@ public class GraphIngestor implements Closeable {
 
                 String srcLabel = nodeIdToLabelCache.get(src);
                 String dstLabel = nodeIdToLabelCache.get(dst);
-                metaStore.addEdgeConnection(label, srcLabel, dstLabel);
+                
+                if (srcLabel != null && dstLabel != null) {
+                    batchConnCounts
+                        .computeIfAbsent(label, k -> new HashMap<>())
+                        .merge(new MetaStore.EdgeConnection(srcLabel, dstLabel), 1L, Long::sum);
+                }
 
                 batchEdgeCount++;
                 batchEdgeCountByLabel.merge(label, 1L, Long::sum);
@@ -226,36 +223,45 @@ public class GraphIngestor implements Closeable {
                 propsForLabel.addAll(props.keySet());
 
                 if (currentBatchBytes > MAX_BATCH_SIZE_BYTES) {
-                    db.write(writeOptions, batch);
-                    metaStore.incEdgeCount(batchEdgeCount);
-                    metaStore.addEdgeLabel(label);
-                    batchEdgeCountByLabel.forEach(metaStore::incEdgeCountByLabel);
-                    batchEdgeProps.forEach((lbl, propSet) -> 
-                        propSet.forEach(p -> metaStore.addEdgeProp(lbl, p))
-                    );
+                    flushEdgesBatch(writeOptions, batch, batchEdgeCount, batchEdgeCountByLabel, batchConnCounts, batchEdgeProps);
+                    
                     batch.close();
                     batch = new WriteBatch();
                     currentBatchBytes = 0;
                     batchEdgeCount = 0;
                     batchEdgeCountByLabel.clear();
+                    batchConnCounts.clear();
                     batchEdgeProps.clear();
                 }
             }
 
             if (batchEdgeCount > 0) {
-                db.write(writeOptions, batch);
-                metaStore.incEdgeCount(batchEdgeCount);
-                batchEdgeCountByLabel.forEach(metaStore::incEdgeCountByLabel);
-                batchEdgeCountByLabel.keySet().forEach(metaStore::addEdgeLabel); 
-                batchEdgeProps.forEach((lbl, propSet) -> 
-                    propSet.forEach(p -> metaStore.addEdgeProp(lbl, p))
-                );
+                flushEdgesBatch(writeOptions, batch, batchEdgeCount, batchEdgeCountByLabel, batchConnCounts, batchEdgeProps);
             }
 
         } finally {
             batch.close();
             writeOptions.close();
         }
+    }
+
+    private void flushEdgesBatch(WriteOptions wo, WriteBatch batch, 
+                                 long count, 
+                                 Map<String, Long> countsByLabel, 
+                                 Map<String, Map<MetaStore.EdgeConnection, Long>> connCounts,
+                                 Map<String, Set<String>> props) throws RocksDBException {
+        db.write(wo, batch);
+        metaStore.incEdgeCount(count);
+        countsByLabel.forEach(metaStore::incEdgeCountByLabel);
+        countsByLabel.keySet().forEach(metaStore::addEdgeLabel);
+        
+        connCounts.forEach((edgeLabel, innerMap) -> {
+            innerMap.forEach((conn, quantity) -> {
+                metaStore.incEdgeConnection(edgeLabel, conn.srcLabel(), conn.dstLabel(), quantity);
+            });
+        });
+
+        props.forEach((lbl, propSet) -> propSet.forEach(p -> metaStore.addEdgeProp(lbl, p)));
     }
 
     @Override public void close() throws IOException {
