@@ -1,6 +1,5 @@
 package com.gdblab.graphstorage.storage;
 
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -20,7 +19,6 @@ public final class EdgeBlob {
         this.props = props;
     }
 
-    /* [u16 labLen][lab][u16 srcLen][src][u16 dstLen][dst][u16 propCount]{ [u16 kLen][k][u32 vLen][v] } */
     public static byte[] encode(String label, String src, String dst, Map<String,String> props){
         byte[] lb = label.getBytes(StandardCharsets.UTF_8);
         byte[] sb = src.getBytes(StandardCharsets.UTF_8);
@@ -64,4 +62,3 @@ public final class EdgeBlob {
         return new EdgeBlob(label, src, dst, props);
     }
 }
-

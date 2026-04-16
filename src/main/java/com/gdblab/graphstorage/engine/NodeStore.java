@@ -1,8 +1,7 @@
-package com.gdblab.graphstorage.storage;
-
+package com.gdblab.graphstorage.engine;
 
 import org.rocksdb.*;
-
+import com.gdblab.graphstorage.storage.NodeBlob;
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable;
 
 import java.nio.charset.StandardCharsets;
@@ -10,12 +9,13 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-
-class NodeStore  {
+public class NodeStore {
     private final RocksDB db;
     private final ColumnFamilyHandle cf;
 
-    NodeStore(RocksDB db, ColumnFamilyHandle cf) { this.db = db; this.cf = cf; }
+    public record NodeEntry(String id, NodeBlob blob) {}
+
+    public NodeStore(RocksDB db, ColumnFamilyHandle cf) { this.db = db; this.cf = cf; }
 
     public void put(String nodeId, String label, Map<String,String> props) throws RocksDBException {
         db.put(cf, KeySchema.keyNode(nodeId), NodeBlob.encode(label, props));
@@ -26,31 +26,14 @@ class NodeStore  {
         return v==null? null : NodeBlob.decode(v);
     }
 
-
-    /* 
-    public Iterable<GraphQueries.NodeEntry> scanAll(){
-        return () -> new Iterator<>(){
-            final RocksIterator it = db.newIterator(cf);{
-                it.seekToFirst();
-            }
-            @Override public boolean hasNext() { return it.isValid(); }
-            @Override public GraphQueries.NodeEntry next() {
-                byte[] k = it.key(); byte[] v = it.value(); it.next();
-                String id = new String(k, StandardCharsets.UTF_8).substring("node:".length());
-                return new GraphQueries.NodeEntry(id, NodeBlob.decode(v));
-            }
-        };
-    }*/
-
-    // =================================================================
-    public AutoCloseableIterable<GraphQueries.NodeEntry> scanAll() {
+    public AutoCloseableIterable<NodeEntry> scanAll() {
         final RocksIterator it = db.newIterator(cf);
 
         return new AutoCloseableIterable<>() {
             private boolean closed = false;
 
             @Override
-            public Iterator<GraphQueries.NodeEntry> iterator() {
+            public Iterator<NodeEntry> iterator() {
                 if (closed) {
                     throw new IllegalStateException("Iterator has been closed");
                 }
@@ -58,7 +41,7 @@ class NodeStore  {
                 it.seekToFirst(); 
 
                 return new Iterator<>() {
-                    private GraphQueries.NodeEntry nextVal = null;
+                    private NodeEntry nextVal = null;
                     private boolean hasNextCalled = false;
 
                     @Override
@@ -74,7 +57,7 @@ class NodeStore  {
                             byte[] v = it.value();
                             
                             String id = new String(k, StandardCharsets.UTF_8).substring("node:".length());
-                            nextVal = new GraphQueries.NodeEntry(id, NodeBlob.decode(v));
+                            nextVal = new NodeEntry(id, NodeBlob.decode(v));
                             
                             it.next(); 
                         }
@@ -82,11 +65,11 @@ class NodeStore  {
                     }
 
                     @Override
-                    public GraphQueries.NodeEntry next() {
+                    public NodeEntry next() {
                         if (!hasNext()) { 
                             throw new NoSuchElementException();
                         }
-                        GraphQueries.NodeEntry current = nextVal;
+                        NodeEntry current = nextVal;
                         hasNextCalled = false;
                         nextVal = null;
                         return current;
@@ -103,6 +86,4 @@ class NodeStore  {
             }
         };
     }
-
 }
-

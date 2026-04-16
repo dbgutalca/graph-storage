@@ -11,7 +11,10 @@ import org.rocksdb.RocksDBException;
 
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable;
 import com.gdblab.graphstorage.storage.Utils.GraphStorageException;
-import com.gdblab.graphstorage.storage.MetaStore.EdgeConnection;
+import com.gdblab.graphstorage.engine.NodeStore;
+import com.gdblab.graphstorage.engine.EdgeStore;
+import com.gdblab.graphstorage.engine.IndexStore;
+import com.gdblab.graphstorage.engine.MetaStore;
 
 import java.util.*;
 
@@ -117,15 +120,18 @@ public class GraphQueries implements Closeable {
     // Iterators
 
     public AutoCloseableIterable<NodeEntry> getNodeIterator() {
-        return nodes.scanAll();
+        AutoCloseableIterable<NodeStore.NodeEntry> engineIt = nodes.scanAll();
+        return mapLazy(engineIt, e -> new NodeEntry(e.id(), e.blob()));
     }
 
     public AutoCloseableIterable<EdgeEntry> getEdgeIterator() {
-        return edges.scanAll();
+        AutoCloseableIterable<EdgeStore.EdgeEntry> engineIt = edges.scanAll();
+        return mapLazy(engineIt, e -> new EdgeEntry(e.id(), e.blob()));
     }
 
     public AutoCloseableIterable<EdgeEntry> getEdgeIteratorByLabel(String label) {
-        return index.getEdgeEntriesByLabel(label);
+        AutoCloseableIterable<EdgeStore.EdgeEntry> engineIt = index.getEdgeEntriesByLabel(label);
+        return mapLazy(engineIt, e -> new EdgeEntry(e.id(), e.blob()));
     }
 
     public AutoCloseableIterable<EdgeEntry> getNeighbours(String nodeId) {

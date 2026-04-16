@@ -1,6 +1,5 @@
 package com.gdblab.graphstorage.storage;
 
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +15,6 @@ public final class NodeBlob {
         this.props = props;
     }
 
-    /* [u16 labLen][lab][u16 propCount]{ [u16 kLen][k][u32 vLen][v] } */
     public static byte[] encode(String label, Map<String,String> props){
         byte[] lb = label.getBytes(StandardCharsets.UTF_8);
         int size = 2 + lb.length + 2;

@@ -6,7 +6,8 @@ import org.rocksdb.RocksDBException;
 import com.gdblab.graphstorage.storage.*;
 import com.gdblab.graphstorage.storage.Utils.GraphStorageException;
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable; 
-import com.gdblab.graphstorage.storage.GraphQueries;
+import com.gdblab.graphstorage.storage.GraphQueries.NodeEntry;
+import com.gdblab.graphstorage.storage.GraphQueries.EdgeEntry;
 
 
 import java.nio.file.Path;
@@ -89,7 +90,7 @@ public class GraphStorage implements AutoCloseable {
      * </pre>
      * @return An auto-closeable iterator of NodeEntry.
      */
-    public AutoCloseableIterable<GraphQueries.NodeEntry> getNodeIterator() {
+    public AutoCloseableIterable<NodeEntry> getNodeIterator() {
         return store.queries().getNodeIterator();
     }
 
@@ -101,7 +102,7 @@ public class GraphStorage implements AutoCloseable {
      *
      * @return An auto-closeable iterator of EdgeEntry.
      */
-    public AutoCloseableIterable<GraphQueries.EdgeEntry> getEdgeIterator() {
+    public AutoCloseableIterable<EdgeEntry> getEdgeIterator() {
         return store.queries().getEdgeIterator();
     }
 
@@ -114,7 +115,7 @@ public class GraphStorage implements AutoCloseable {
      * @param label The label to filter edges (e.g., "Knows")
      * @return An auto-closeable iterator of EdgeEntry.
      */
-    public AutoCloseableIterable<GraphQueries.EdgeEntry> getEdgeIteratorByLabel(String label) {
+    public AutoCloseableIterable<EdgeEntry> getEdgeIteratorByLabel(String label) {
         return store.queries().getEdgeIteratorByLabel(label);
     }
 
@@ -127,7 +128,7 @@ public class GraphStorage implements AutoCloseable {
      * @param nodeId The ID of the central node.
      * @return An auto-closeable iterator of EdgeEntry.
      */
-    public AutoCloseableIterable<GraphQueries.EdgeEntry> getNeighbours(String nodeId) {
+    public AutoCloseableIterable<EdgeEntry> getNeighbours(String nodeId) {
         return store.queries().getNeighbours(nodeId);
     }
 
@@ -141,7 +142,7 @@ public class GraphStorage implements AutoCloseable {
      * @param propValue The exact value to search for (e.g., "Juan").
      * @return An auto-closeable iterator of NodeEntry.
      */
-    public AutoCloseableIterable<GraphQueries.NodeEntry> getNodesByPropertyEquals(String propName, String propValue) {
+    public AutoCloseableIterable<NodeEntry> getNodesByPropertyEquals(String propName, String propValue) {
         return store.queries().getNodesByPropertyEquals(propName, propValue);
     }
 
@@ -155,7 +156,7 @@ public class GraphStorage implements AutoCloseable {
      * @param propValue The exact value to search for (e.g., "5").
      * @return An auto-closeable iterator of EdgeEntry.
      */
-    public AutoCloseableIterable<GraphQueries.EdgeEntry> getEdgesByPropertyEquals(String propName, String propValue) {
+    public AutoCloseableIterable<EdgeEntry> getEdgesByPropertyEquals(String propName, String propValue) {
         return store.queries().getEdgesByPropertyEquals(propName, propValue);
     }
 

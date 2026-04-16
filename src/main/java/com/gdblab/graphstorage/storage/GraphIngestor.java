@@ -1,6 +1,8 @@
 package com.gdblab.graphstorage.storage;
 
 import org.rocksdb.*;
+import com.gdblab.graphstorage.engine.MetaStore;
+import com.gdblab.graphstorage.engine.KeySchema;
 
 import java.io.BufferedReader;
 import java.io.Closeable;
@@ -15,7 +17,11 @@ public class GraphIngestor implements Closeable {
     private final RocksDB db;
     private final ColumnFamilyHandle cfNodes;
     private final ColumnFamilyHandle cfEdges;
-    private final ColumnFamilyHandle cfIndex;
+    private final ColumnFamilyHandle cfIdxNodeProp;
+    private final ColumnFamilyHandle cfIdxEdgeProp;
+    private final ColumnFamilyHandle cfIdxEdgeSrc;
+    private final ColumnFamilyHandle cfIdxEdgeDst;
+    private final ColumnFamilyHandle cfIdxLabel;
     private final MetaStore metaStore;
 
     private Map<String, String> nodeIdToLabelCache;
@@ -25,11 +31,23 @@ public class GraphIngestor implements Closeable {
 
     private final ArrayList<String> reuseCols = new ArrayList<>(100);
 
-    GraphIngestor(RocksDB db, ColumnFamilyHandle cfNodes, ColumnFamilyHandle cfEdges, ColumnFamilyHandle cfIndex, MetaStore metaStore) {
+    GraphIngestor(RocksDB db, 
+                  ColumnFamilyHandle cfNodes, 
+                  ColumnFamilyHandle cfEdges, 
+                  ColumnFamilyHandle cfIdxNodeProp,
+                  ColumnFamilyHandle cfIdxEdgeProp,
+                  ColumnFamilyHandle cfIdxEdgeSrc,
+                  ColumnFamilyHandle cfIdxEdgeDst,
+                  ColumnFamilyHandle cfIdxLabel,
+                  MetaStore metaStore) {
         this.db = db;
         this.cfNodes = cfNodes;
         this.cfEdges = cfEdges;
-        this.cfIndex = cfIndex;
+        this.cfIdxNodeProp = cfIdxNodeProp;
+        this.cfIdxEdgeProp = cfIdxEdgeProp;
+        this.cfIdxEdgeSrc = cfIdxEdgeSrc;
+        this.cfIdxEdgeDst = cfIdxEdgeDst;
+        this.cfIdxLabel = cfIdxLabel;
         this.metaStore = metaStore;
         this.nodeIdToLabelCache = new HashMap<>();
     }
@@ -87,8 +105,8 @@ public class GraphIngestor implements Closeable {
                 for (var e : props.entrySet()){
                     if (e.getValue()==null || e.getValue().isEmpty()) continue;
                     String normValue = KeySchema.norm(e.getValue());
-                    byte[] indexKey = KeySchema.idxKey("prop", e.getKey(), normValue, nodeId);
-                    batch.put(cfIndex, indexKey, EMPTY_VALUE);
+                    byte[] indexKey = KeySchema.idxKey(e.getKey(), normValue, nodeId);
+                    batch.put(cfIdxNodeProp, indexKey, EMPTY_VALUE);
                     currentBatchBytes += indexKey.length;
                 }
                 
@@ -188,23 +206,23 @@ public class GraphIngestor implements Closeable {
                 batch.put(cfEdges, edgeKey, edgeValue);
                 currentBatchBytes += edgeKey.length + edgeValue.length;
 
-                byte[] idxLabelKey = KeySchema.idxKey("label","edge", label, edgeId);
-                batch.put(cfIndex, idxLabelKey, edgeValue); 
+                byte[] idxLabelKey = KeySchema.idxKey(label, edgeId);
+                batch.put(cfIdxLabel, idxLabelKey, edgeValue); 
                 currentBatchBytes += idxLabelKey.length;
 
-                byte[] idxBySrcKey = KeySchema.idxKey("edgesBySrc", src, edgeId);
-                batch.put(cfIndex, idxBySrcKey, EMPTY_VALUE); 
+                byte[] idxBySrcKey = KeySchema.idxKey(src, edgeId);
+                batch.put(cfIdxEdgeSrc, idxBySrcKey, EMPTY_VALUE); 
                 currentBatchBytes += idxBySrcKey.length;
 
-                byte[] idxByDstKey = KeySchema.idxKey("edgesByDst", dst, edgeId);
-                batch.put(cfIndex, idxByDstKey, EMPTY_VALUE); 
+                byte[] idxByDstKey = KeySchema.idxKey(dst, edgeId);
+                batch.put(cfIdxEdgeDst, idxByDstKey, EMPTY_VALUE); 
                 currentBatchBytes += idxByDstKey.length;
 
                 for (var e : props.entrySet()){
                     if (e.getValue()==null || e.getValue().isEmpty()) continue;
                     String normValue = KeySchema.norm(e.getValue());
-                    byte[] indexKey = KeySchema.idxKey("propEdge", e.getKey(), normValue, edgeId);
-                    batch.put(cfIndex, indexKey, EMPTY_VALUE);
+                    byte[] indexKey = KeySchema.idxKey(e.getKey(), normValue, edgeId);
+                    batch.put(cfIdxEdgeProp, indexKey, EMPTY_VALUE);
                     currentBatchBytes += indexKey.length;
                 }
 

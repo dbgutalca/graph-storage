@@ -1,4 +1,4 @@
-package com.gdblab.graphstorage.storage;
+package com.gdblab.graphstorage.engine;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -13,7 +13,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-class MetaStore {
+public class MetaStore {
 
     private long nodeCount;
     private long edgeCount;
@@ -41,9 +41,9 @@ class MetaStore {
     }
 
     public static class EdgeConnectionStats {
-        String srcLabel;
-        String dstLabel;
-        long count;
+        public String srcLabel;
+        public String dstLabel;
+        public long count;
 
         public EdgeConnectionStats(String src, String dst, long count) {
             this.srcLabel = src;
