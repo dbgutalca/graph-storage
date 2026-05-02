@@ -2,12 +2,16 @@ package com.gdblab.graphstorage.engine;
 
 
 import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.Slice;
 import com.gdblab.graphstorage.storage.EdgeBlob;
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 
@@ -34,7 +38,7 @@ public class IndexStore  {
     }
   
     public void forEachEdgeIdByLabel(String label, Consumer<String> consumer){
-        byte[] prefix = KeySchema.idxKey(label, "");
+        byte[] prefix = (label + ":").getBytes();
         scan(cfIdxLabel, prefix, consumer);
     }
 
@@ -129,7 +133,7 @@ public class IndexStore  {
     }
 
     public AutoCloseableIterable<String> getEdgeIdsByLabel(String label){
-        return scanLazy(cfIdxLabel, KeySchema.idxKey(label, ""));
+        return scanLazy(cfIdxLabel, (label + ":").getBytes());
     }
     public AutoCloseableIterable<String> getEdgesIdsBySrc(String srcNodeId){
         return scanLazy(cfIdxEdgeSrc, KeySchema.idxKey(srcNodeId, ""));
@@ -145,54 +149,47 @@ public class IndexStore  {
         return scanLazy(cfIdxEdgeProp, KeySchema.idxKey(propName, KeySchema.norm(propValue), ""));
     }
 
-    // Optimized scan for edge entries by label (Covering Index)
-    public AutoCloseableIterable<EdgeStore.EdgeEntry> getEdgeEntriesByLabel(String label) {
-        byte[] prefix = KeySchema.idxKey(label, "");
-        final RocksIterator it = db.newIterator(cfIdxLabel);
+    public static record RawEdgeEntry(byte[] rawData) {}
 
-        return new AutoCloseableIterable<EdgeStore.EdgeEntry>() {
+    public AutoCloseableIterable<RawEdgeEntry> getRawEdgeEntriesByLabel(String label) {
+        byte[] prefix = (label + ":").getBytes();
+        byte[] upperBound = prefix.clone();
+        upperBound[upperBound.length - 1]++; 
+
+        final ReadOptions readOptions = new ReadOptions()
+            .setIterateUpperBound(new Slice(upperBound))
+            .setReadaheadSize(4 * 1024 * 1024); 
+            
+        final RocksIterator it = db.newIterator(cfIdxLabel, readOptions);
+
+        return new AutoCloseableIterable<RawEdgeEntry>() {
             private boolean closed = false;
 
             @Override
-            public Iterator<EdgeStore.EdgeEntry> iterator() {
+            public Iterator<RawEdgeEntry> iterator() {
                 if (closed) throw new IllegalStateException("Closed");
                 it.seek(prefix);
 
-                return new Iterator<EdgeStore.EdgeEntry>() {
-                    private EdgeStore.EdgeEntry nextVal = null;
-                    private boolean hasNextCalled = false;
-
+                return new Iterator<RawEdgeEntry>() {
                     @Override
                     public boolean hasNext() {
                         if (closed) return false;
-                        if (hasNextCalled) return nextVal != null;
-
-                        hasNextCalled = true;
-                        nextVal = null;
-
-                        if (it.isValid() && KeySchema.startsWith(it.key(), prefix)) {
-                            String id = KeySchema.suffixAfterPrefix(it.key(), prefix);
-                            EdgeBlob blob = EdgeBlob.decode(it.value());
-                            nextVal = new EdgeStore.EdgeEntry(id, blob);
-                            it.next();
-                        }
-                        return nextVal != null;
+                        return it.isValid();
                     }
 
                     @Override
-                    public EdgeStore.EdgeEntry next() {
+                    public RawEdgeEntry next() {
                         if (!hasNext()) throw new NoSuchElementException();
-                        EdgeStore.EdgeEntry current = nextVal;
-                        hasNextCalled = false;
-                        nextVal = null;
-                        return current;
+                        RawEdgeEntry entry = new RawEdgeEntry(it.value()); // JNI Call per FAT BATCH (1 per 1000 records)
+                        it.next(); // JNI Call per FAT BATCH
+                        return entry;
                     }
                 };
             }
 
             @Override
             public void close() {
-                if (!closed) { it.close(); closed = true; }
+                if (!closed) { it.close(); readOptions.close(); closed = true; }
             }
         };
     }

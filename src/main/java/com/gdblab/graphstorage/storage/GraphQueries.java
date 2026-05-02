@@ -16,6 +16,8 @@ import com.gdblab.graphstorage.engine.EdgeStore;
 import com.gdblab.graphstorage.engine.IndexStore;
 import com.gdblab.graphstorage.engine.MetaStore;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.*;
 
 /** API for querying */
@@ -35,6 +37,10 @@ public class GraphQueries implements Closeable {
     // Basics
     public NodeBlob getNode(String nodeId) throws RocksDBException {
         return nodes.get(nodeId);
+    }
+
+    public Map<String, NodeBlob> multiGetNodes(List<String> nodeIds) throws RocksDBException {
+        return nodes.multiGet(nodeIds);
     }
 
     public EdgeBlob getEdge(String edgeId) throws RocksDBException {
@@ -130,8 +136,62 @@ public class GraphQueries implements Closeable {
     }
 
     public AutoCloseableIterable<EdgeEntry> getEdgeIteratorByLabel(String label) {
-        AutoCloseableIterable<EdgeStore.EdgeEntry> engineIt = index.getEdgeEntriesByLabel(label);
-        return mapLazy(engineIt, e -> new EdgeEntry(e.id(), e.blob()));
+        AutoCloseableIterable<IndexStore.RawEdgeEntry> source = index.getRawEdgeEntriesByLabel(label);
+        
+        return new AutoCloseableIterable<EdgeEntry>() {
+            @Override
+            public Iterator<EdgeEntry> iterator() {
+                Iterator<IndexStore.RawEdgeEntry> sourceIt = source.iterator();
+                
+                return new Iterator<EdgeEntry>() {
+                    private final List<EdgeEntry> currentBatch = new ArrayList<>();
+                    private int batchIdx = 0;
+
+                    @Override
+                    public boolean hasNext() {
+                        if (batchIdx < currentBatch.size()) return true;
+                        if (!sourceIt.hasNext()) return false;
+                        
+                        currentBatch.clear();
+                        batchIdx = 0;
+                        byte[] raw = sourceIt.next().rawData();
+                        ByteBuffer bb = ByteBuffer.wrap(raw).order(ByteOrder.BIG_ENDIAN);
+                        int count = bb.getInt();
+                        for (int i=0; i<count; i++) {
+                            int len = bb.getInt();
+                            byte[] mega = new byte[len];
+                            bb.get(mega);
+                            ByteBuffer megaBB = ByteBuffer.wrap(mega).order(ByteOrder.BIG_ENDIAN);
+                            int edgeLen = megaBB.getInt();
+                            byte[] edgeBytes = new byte[edgeLen];
+                            megaBB.get(edgeBytes);
+                            
+                            EdgeBlob.FastEdge fast = EdgeBlob.decodeFast(edgeBytes);
+                            currentBatch.add(new EdgeEntry(fast.id(), EdgeBlob.decode(edgeBytes)));
+                        }
+                        return !currentBatch.isEmpty();
+                    }
+
+                    @Override
+                    public EdgeEntry next() {
+                        if (!hasNext()) throw new NoSuchElementException();
+                        return currentBatch.get(batchIdx++);
+                    }
+                };
+            }
+
+            @Override
+            public void close() {
+                source.close();
+            }
+        };
+    }
+
+    public record RawEdgeEntry(byte[] rawData) {}
+
+    public AutoCloseableIterable<RawEdgeEntry> getRawEdgeIteratorByLabel(String label) {
+        AutoCloseableIterable<IndexStore.RawEdgeEntry> engineIt = index.getRawEdgeEntriesByLabel(label);
+        return mapLazy(engineIt, e -> new RawEdgeEntry(e.rawData()));
     }
 
     public AutoCloseableIterable<EdgeEntry> getNeighbours(String nodeId) {

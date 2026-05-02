@@ -8,9 +8,11 @@ import com.gdblab.graphstorage.storage.Utils.GraphStorageException;
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable; 
 import com.gdblab.graphstorage.storage.GraphQueries.NodeEntry;
 import com.gdblab.graphstorage.storage.GraphQueries.EdgeEntry;
+import com.gdblab.graphstorage.storage.GraphQueries.RawEdgeEntry;
 
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -61,6 +63,14 @@ public class GraphStorage implements AutoCloseable {
             return store.queries().getNode(nodeId);
         } catch (RocksDBException e) {
             throw new GraphStorageException("Failed to get node with ID: " + nodeId, e);
+        }
+    }
+
+    public Map<String, NodeBlob> multiGetNodes(List<String> nodeIds) throws GraphStorageException {
+        try {
+            return store.queries().multiGetNodes(nodeIds);
+        } catch (RocksDBException e) {
+            throw new GraphStorageException("Failed to multi-get nodes", e);
         }
     }
 
@@ -117,6 +127,19 @@ public class GraphStorage implements AutoCloseable {
      */
     public AutoCloseableIterable<EdgeEntry> getEdgeIteratorByLabel(String label) {
         return store.queries().getEdgeIteratorByLabel(label);
+    }
+
+    /**
+     * Returns a lazy iterator over raw edge entries (id and Super Blob) with a specific label.
+     * <p>
+     * <b>Important!</b> this iterator MUST be closed. Always use it
+     * with a try-with-resources block.
+     *
+     * @param label The label to filter edges (e.g., "Knows")
+     * @return An auto-closeable iterator of RawEdgeEntry.
+     */
+    public AutoCloseableIterable<RawEdgeEntry> getRawEdgeIteratorByLabel(String label) {
+        return store.queries().getRawEdgeIteratorByLabel(label);
     }
 
     /**

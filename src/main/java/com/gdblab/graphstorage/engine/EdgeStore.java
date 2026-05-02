@@ -22,8 +22,9 @@ public class EdgeStore {
     public EdgeStore(RocksDB db, ColumnFamilyHandle cf) { this.db = db; this.cf = cf; }
 
     public void put(String edgeId, String label, String src, String dst, Map<String,String> props) throws RocksDBException {
-        db.put(cf, KeySchema.keyEdge(edgeId), EdgeBlob.encode(label, src, dst, props));
+        db.put(cf, KeySchema.keyEdge(edgeId), EdgeBlob.encode(edgeId, label, src, dst, props));
     }
+
 
     public EdgeBlob get(String edgeId) throws RocksDBException {
         byte[] v = db.get(cf, KeySchema.keyEdge(edgeId));

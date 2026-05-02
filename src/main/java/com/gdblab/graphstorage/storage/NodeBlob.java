@@ -35,15 +35,26 @@ public final class NodeBlob {
     }
 
     public static NodeBlob decode(byte[] b){
-        ByteBuffer bb = ByteBuffer.wrap(b).order(ByteOrder.BIG_ENDIAN);
-        int ll = bb.getShort() & 0xFFFF; byte[] lb = new byte[ll]; bb.get(lb);
+        return decode(ByteBuffer.wrap(b).order(ByteOrder.BIG_ENDIAN));
+    }
+
+    public static NodeBlob decode(ByteBuffer bb){
+        int ll = bb.getShort() & 0xFFFF;
+        byte[] lb = new byte[ll];
+        bb.get(lb);
         String label = new String(lb, StandardCharsets.UTF_8);
+        
         int pc = bb.getShort() & 0xFFFF;
         Map<String,String> props = new LinkedHashMap<>(pc);
-        for (int i=0;i<pc;i++){
-            int kl = bb.getShort() & 0xFFFF; byte[] kb = new byte[kl]; bb.get(kb);
+        for (int i=0; i<pc; i++){
+            int kl = bb.getShort() & 0xFFFF;
+            byte[] kb = new byte[kl];
+            bb.get(kb);
             String k = new String(kb, StandardCharsets.UTF_8);
-            int vl = bb.getInt(); byte[] vb = new byte[vl]; bb.get(vb);
+            
+            int vl = bb.getInt();
+            byte[] vb = new byte[vl];
+            bb.get(vb);
             String v = new String(vb, StandardCharsets.UTF_8);
             props.put(k, v);
         }

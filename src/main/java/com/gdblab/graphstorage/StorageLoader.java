@@ -34,7 +34,6 @@ public class StorageLoader {
             
             long endEdges = System.currentTimeMillis();
             System.out.println("Edges ingested in: " + (endEdges - startEdges) + " ms");
-
             System.out.println("\n--- Verification ---");
             System.out.println("Total Nodes: " + db.getNodesQuantity());
             System.out.println("Total Edges: " + db.getEdgesQuantity());

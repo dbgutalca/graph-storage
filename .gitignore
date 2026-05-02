@@ -8,6 +8,9 @@ GraphUsage2.java
 TimeTime.java
 QuerySpeedTest.java
 sf*/
+*.pgdf
+graph_db
+.DS_Store
 
 pom.xml.tag
 pom.xml.releaseBackup

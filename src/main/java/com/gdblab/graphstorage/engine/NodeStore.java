@@ -5,7 +5,10 @@ import com.gdblab.graphstorage.storage.NodeBlob;
 import com.gdblab.graphstorage.storage.Utils.AutoCloseableIterable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
@@ -24,6 +27,25 @@ public class NodeStore {
     public NodeBlob get(String nodeId) throws RocksDBException {
         byte[] v = db.get(cf, KeySchema.keyNode(nodeId));
         return v==null? null : NodeBlob.decode(v);
+    }
+
+    public Map<String, NodeBlob> multiGet(List<String> nodeIds) throws RocksDBException {
+        List<ColumnFamilyHandle> cfs = new ArrayList<>(nodeIds.size());
+        List<byte[]> keys = new ArrayList<>(nodeIds.size());
+        for (String id : nodeIds) {
+            cfs.add(cf);
+            keys.add(KeySchema.keyNode(id));
+        }
+        
+        List<byte[]> values = db.multiGetAsList(cfs, keys);
+        Map<String, NodeBlob> result = new HashMap<>(nodeIds.size());
+        for (int i = 0; i < nodeIds.size(); i++) {
+            byte[] v = values.get(i);
+            if (v != null) {
+                result.put(nodeIds.get(i), NodeBlob.decode(v));
+            }
+        }
+        return result;
     }
 
     public AutoCloseableIterable<NodeEntry> scanAll() {
