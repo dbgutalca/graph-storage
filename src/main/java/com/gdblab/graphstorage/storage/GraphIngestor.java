@@ -29,12 +29,14 @@ public class GraphIngestor implements Closeable {
     private Map<String, byte[]> nodeIdToBlobCache;
 
     private static final long MAX_BATCH_SIZE_BYTES = 16_777_216L; 
+    private static final int TARGET_MEGABLOB_SIZE_BYTES = 16 * 1024 * 1024; // 16 MB target for FatBatches
     private static final byte[] EMPTY_VALUE = new byte[0];
 
     private final ArrayList<String> reuseCols = new ArrayList<>(100);
 
     // Grouping for Fat-Indexing
     private final Map<String, List<byte[]>> labelToPendingMegaBlobs = new HashMap<>();
+    private final Map<String, Integer> labelToPendingSize = new HashMap<>();
 
     GraphIngestor(RocksDB db, 
                   ColumnFamilyHandle cfNodes, 
@@ -158,15 +160,21 @@ public class GraphIngestor implements Closeable {
                 batch.put(cfEdges, edgeKey, edgeValue);
                 currentBatchBytes += edgeKey.length + edgeValue.length;
 
-                // fat indexin group blobs in batches of 1000 per label
+                // fat indexing: group blobs in batches by target byte size per label
                 byte[] megaBlob = EdgeBlob.encodeMega(edgeValue, nodeIdToBlobCache.get(src), nodeIdToBlobCache.get(dst));
-                List<byte[]> pending = labelToPendingMegaBlobs.computeIfAbsent(label, k -> new ArrayList<>(1000));
+                List<byte[]> pending = labelToPendingMegaBlobs.computeIfAbsent(label, k -> new ArrayList<>());
+                int currentSize = labelToPendingSize.getOrDefault(label, 4); // 4 bytes for count in FatBatch
+
                 pending.add(megaBlob);
-                if (pending.size() >= 1000) {
+                currentSize += 4 + megaBlob.length; // 4 bytes for length prefix per megaBlob
+
+                if (currentSize >= TARGET_MEGABLOB_SIZE_BYTES) {
                     byte[] fatBatchKey = (label + ":" + UUID.randomUUID().toString()).getBytes(StandardCharsets.UTF_8);
                     batch.put(cfIdxLabel, fatBatchKey, EdgeBlob.encodeFatBatch(pending));
                     pending.clear();
+                    currentSize = 4;
                 }
+                labelToPendingSize.put(label, currentSize);
 
 
                 batch.put(cfIdxEdgeSrc, KeySchema.idxKey(src, edgeId), EMPTY_VALUE);
@@ -200,7 +208,7 @@ public class GraphIngestor implements Closeable {
                 }
             }
             if (batchEdgeCount > 0) flushEdgesBatch(writeOptions, batch, batchEdgeCount, batchEdgeCountByLabel, batchConnCounts, batchEdgeProps);
-        } finally { batch.close(); writeOptions.close(); labelToPendingMegaBlobs.clear(); }
+        } finally { batch.close(); writeOptions.close(); labelToPendingMegaBlobs.clear(); labelToPendingSize.clear(); }
     }
 
     private void flushEdgesBatch(WriteOptions wo, WriteBatch batch, long count, Map<String, Long> countsByLabel, Map<String, Map<MetaStore.EdgeConnection, Long>> connCounts, Map<String, Set<String>> props) throws RocksDBException {
